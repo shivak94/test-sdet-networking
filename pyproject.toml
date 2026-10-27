@@ -47,11 +47,12 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short --strict-markers -p no:cacheprovider"
 markers = [
     "bonus: marks tests as bonus challenges (deselect with '-m \"not bonus\"')",
     "performance: marks tests as performance tests",
     "slow: marks tests as slow running",
+    "known_bug(id): test fails because of a bug listed in BUGS_FOUND.md",
 ]
 
 [tool.mypy]
