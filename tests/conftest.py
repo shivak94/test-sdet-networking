@@ -1,26 +1,8 @@
 """
 Shared pytest fixtures for NOS testing.
-
-=============================================================================
-CANDIDATE INSTRUCTIONS
-=============================================================================
-
-Complete the TODO items in this file to create reusable test fixtures.
-
-Requirements:
-1. Implement all fixtures marked with TODO
-2. Follow the existing patterns for fixture design
-3. Use appropriate fixture scopes (function, module, session)
-4. Ensure proper cleanup in fixtures that create resources
-
-Tips:
-- Review the existing fixtures for patterns
-- Use yield for fixtures that need cleanup
-- Consider fixture dependencies
-- Reference docs/PROTOCOL_REFERENCE.md for protocol details
-
-=============================================================================
 """
+import time
+
 import pytest
 from typing import Any, Dict, Generator, List, Optional
 
@@ -30,6 +12,40 @@ from mock_nos.protocols.ospf import OSPFInstance, OSPFNeighbor, OSPFNeighborStat
 from mock_nos.containers import BGPContainer, SwssContainer, ContainerState
 from mock_nos.hal import PortManager, RouteManager
 from mock_nos.topology import TopologyBuilder, Topology, DeviceRole
+
+
+pytest_plugins = ["tests.plugins.topology_plugin"]
+
+
+# =============================================================================
+# CLOCK
+# =============================================================================
+
+class FakeClock:
+    """Stand-in for the time module so timer tests don't have to sleep."""
+
+    def __init__(self, start: float = 1_000_000.0):
+        self.now = start
+
+    def time(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.now += seconds
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds
+
+
+@pytest.fixture
+def fake_clock(monkeypatch) -> FakeClock:
+    import mock_nos.protocols.bgp as bgp_mod
+    import mock_nos.protocols.ospf as ospf_mod
+
+    clock = FakeClock()
+    monkeypatch.setattr(bgp_mod, "time", clock)
+    monkeypatch.setattr(ospf_mod, "time", clock)
+    return clock
 
 
 # =============================================================================
@@ -71,21 +87,10 @@ def state_db(redis_mock: RedisMock) -> StateDB:
     return StateDB(redis_mock)
 
 
-# TODO: Implement the databases fixture
-# Requirements:
-# - Should return a dictionary with keys: 'config', 'state', 'redis'
-# - Should depend on config_db, state_db, and redis_mock fixtures
-# - The dict should map to the respective fixture instances
-#
-# Example usage in tests:
-#   def test_something(databases):
-#       config = databases['config']
-#       state = databases['state']
 @pytest.fixture(scope="function")
 def databases(config_db: ConfigDB, state_db: StateDB, redis_mock: RedisMock) -> Dict[str, Any]:
     """Bundle all databases for container initialization."""
-    # YOUR CODE HERE
-    pass
+    return {"config": config_db, "state": state_db, "redis": redis_mock}
 
 
 # =============================================================================
@@ -103,51 +108,32 @@ def bgp_session() -> BGPSession:
     return BGPSession(router_id="10.0.0.1", local_as=65001)
 
 
-# TODO: Implement the bgp_session_with_neighbor fixture
-# Requirements:
-# - Create a BGP session (can reuse bgp_session fixture)
-# - Add one neighbor with:
-#   - neighbor_ip: "10.0.0.2"
-#   - remote_as: 65002
-# - Return the BGPSession with the neighbor already added
-#
-# Hint: Use the add_neighbor method of BGPSession
 @pytest.fixture(scope="function")
 def bgp_session_with_neighbor(bgp_session: BGPSession) -> BGPSession:
     """Create a BGP session with one pre-configured neighbor."""
-    # YOUR CODE HERE
-    pass
+    bgp_session.add_neighbor({"neighbor_ip": "10.0.0.2", "remote_as": 65002})
+    return bgp_session
 
 
-# TODO: Implement the established_bgp_neighbor fixture
-# Requirements:
-# - Create a BGP session with a neighbor
-# - Transition the neighbor to ESTABLISHED state
-# - You'll need to simulate the FSM transitions:
-#   1. Call neighbor.start()
-#   2. Call neighbor.tcp_connection_established()
-#   3. Call neighbor.receive_open() with a valid BGPOpenMessage
-#   4. Call neighbor.receive_keepalive()
-# - Return the BGPNeighbor that is now in ESTABLISHED state
-#
-# This fixture tests your understanding of BGP state machine!
 @pytest.fixture(scope="function")
 def established_bgp_neighbor(bgp_session: BGPSession) -> BGPNeighbor:
     """Create a BGP neighbor in ESTABLISHED state."""
-    # YOUR CODE HERE
-    pass
+    neighbor = bgp_session.add_neighbor({"neighbor_ip": "10.0.0.2", "remote_as": 65002})
+
+    neighbor.start()
+    neighbor.tcp_connection_established()
+    neighbor.receive_open(BGPOpenMessage(my_as=65002, hold_time=180, bgp_identifier="10.0.0.2"))
+    neighbor.receive_keepalive()
+    assert neighbor.state == BGPState.ESTABLISHED
+    return neighbor
 
 
-# TODO: Implement the ospf_instance fixture
-# Requirements:
-# - Create an OSPFInstance with router_id="10.0.0.1"
-# - Add area 0 (the backbone area)
-# - Return the configured instance
 @pytest.fixture(scope="function")
 def ospf_instance() -> OSPFInstance:
     """Create an OSPF instance with area 0."""
-    # YOUR CODE HERE
-    pass
+    instance = OSPFInstance(router_id="10.0.0.1")
+    instance.add_area(0)
+    return instance
 
 
 # =============================================================================
@@ -171,19 +157,13 @@ def bgp_container(databases: Dict[str, Any]) -> Generator[BGPContainer, None, No
     container.stop()
 
 
-# TODO: Implement the swss_container fixture
-# Requirements:
-# - Create a SwssContainer using the databases fixture
-# - Start the container before yielding
-# - Stop the container in cleanup (after yield)
-# - Use Generator type hint: Generator[SwssContainer, None, None]
-#
-# Pattern: Same as bgp_container fixture above
 @pytest.fixture(scope="function")
 def swss_container(databases: Dict[str, Any]) -> Generator[SwssContainer, None, None]:
     """Create and start a SWSS container."""
-    # YOUR CODE HERE
-    pass
+    container = SwssContainer(databases)
+    container.start()
+    yield container
+    container.stop()
 
 
 # =============================================================================
@@ -202,17 +182,13 @@ def route_manager() -> RouteManager:
     return RouteManager()
 
 
-# TODO: Implement the port_manager_with_ports fixture
-# Requirements:
-# - Create a PortManager
-# - Add 4 ports: Ethernet1, Ethernet2, Ethernet3, Ethernet4
-# - All ports should have speed=100000 (100G)
-# - Return the PortManager with ports configured
 @pytest.fixture(scope="function")
 def port_manager_with_ports() -> PortManager:
     """Create a port manager with pre-configured ports."""
-    # YOUR CODE HERE
-    pass
+    manager = PortManager()
+    for i in range(1, 5):
+        manager.add_port(f"Ethernet{i}", speed=100000)
+    return manager
 
 
 # =============================================================================
@@ -233,46 +209,32 @@ def spine_leaf_topology() -> Generator[Topology, None, None]:
     topology.teardown()
 
 
-# TODO: Implement the small_topology fixture
-# Requirements:
-# - Create a simple 1-spine, 2-leaf topology using TopologyBuilder
-# - Use function scope (each test gets fresh topology)
-# - Remember to call build() on the builder
-# - Clean up with topology.teardown() after yield
 @pytest.fixture(scope="function")
 def small_topology() -> Generator[Topology, None, None]:
     """Create a minimal 1-spine, 2-leaf topology."""
-    # YOUR CODE HERE
-    pass
+    topology = TopologyBuilder.create_spine_leaf(num_spines=1, num_leaves=2).build()
+    yield topology
+    topology.teardown()
 
 
 # =============================================================================
 # UTILITY FIXTURES
 # =============================================================================
 
-# TODO: Implement wait_for_bgp_convergence fixture
-# Requirements:
-# - Return a callable/function that can be used to wait for BGP convergence
-# - The returned function should accept:
-#   - neighbors: List[BGPNeighbor] - neighbors to check
-#   - timeout: float - maximum wait time in seconds (default 10.0)
-# - The function should:
-#   - Poll all neighbors until they are all ESTABLISHED
-#   - Return True if all converged within timeout
-#   - Return False if timeout exceeded
-# - Use time.sleep(0.1) between polls
-#
-# Example usage:
-#   def test_convergence(wait_for_bgp_convergence, bgp_session):
-#       # ... add neighbors and start them ...
-#       result = wait_for_bgp_convergence(list(bgp_session.neighbors.values()))
-#       assert result is True
 @pytest.fixture
 def wait_for_bgp_convergence():
     """Factory fixture that returns a convergence waiter function."""
-    # YOUR CODE HERE
-    # Hint: Define and return an inner function
-    pass
+
+    def wait(neighbors: List[BGPNeighbor], timeout: float = 10.0) -> bool:
+        deadline = time.monotonic() + timeout
+        while True:
+            if all(n.is_established for n in neighbors):
+                return True
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(0.1)
+
+    return wait
 
 
 # =============================================================================
