@@ -1,0 +1,205 @@
+# =============================================================================
+# Organization-wide Ruff configuration
+# Python linting and formatting rules for all projects
+# https://docs.astral.sh/ruff/configuration/
+# =============================================================================
+#
+# Ruff is an extremely fast Python linter and formatter, written in Rust.
+# It replaces Flake8, isort, pyupgrade, and Black in a single tool.
+#
+# To test locally:
+#   ruff check --config configs/ruff.toml .
+#   ruff format --config configs/ruff.toml .
+# =============================================================================
+
+# =============================================================================
+# Global settings
+# =============================================================================
+
+# line-length: Maximum line length before wrapping
+# 120 chars balances readability with modern wide screens
+# Longer than PEP 8's 79, but widely accepted in industry
+line-length = 120
+
+# indent-width: Number of spaces per indentation level
+# 4 spaces is PEP 8 standard for Python
+indent-width = 4
+
+# target-version: Minimum Python version to target
+# Enables version-specific lints and ensures compatibility
+# Set to 3.12 to use latest Python features and type hints
+target-version = "py312"
+
+# preview: Enable preview/unstable rules
+# Gives access to latest linting rules before stable release
+# May occasionally have false positives, but catches more issues
+preview = true
+
+# =============================================================================
+# File exclusions
+# =============================================================================
+# Directories and patterns to skip during linting
+# These are typically generated, vendored, or external code
+exclude = [
+    ".git",             # Git internals
+    ".venv",            # Virtual environments
+    "__pycache__",      # Python bytecode cache
+    "*.egg-info",       # Package metadata
+    ".pytest_cache",    # Pytest cache
+    "node_modules",     # Node.js dependencies (in mixed projects)
+    "vendor",           # Vendored third-party code
+    "migrations",       # Database migrations (often auto-generated)
+    "build",            # Build output
+    "dist",             # Distribution packages
+]
+
+# =============================================================================
+# Linting configuration
+# =============================================================================
+[lint]
+
+# fixable/unfixable: Control which rules can be auto-fixed
+# ALL = allow all safe fixes; unfixable = [] means no restrictions
+# Ruff will only auto-fix rules marked as safe to fix
+fixable = ["ALL"]
+unfixable = []
+
+# =============================================================================
+# Rule selection
+# =============================================================================
+# Enable comprehensive rule sets for thorough code quality checks
+# Each prefix enables a category of rules from various linting tools
+select = [
+    "E",    # pycodestyle errors - PEP 8 style violations
+    "W",    # pycodestyle warnings - PEP 8 style warnings
+    "F",    # pyflakes - logical errors (undefined names, unused imports)
+    "I",    # isort - import sorting and organization
+    "B",    # flake8-bugbear - common bugs and design problems
+    "C4",   # flake8-comprehensions - better list/dict/set comprehensions
+    "UP",   # pyupgrade - upgrade syntax for newer Python versions
+    "ARG",  # flake8-unused-arguments - unused function arguments
+    "SIM",  # flake8-simplify - simplifiable code patterns
+    "TCH",  # flake8-type-checking - TYPE_CHECKING block optimization
+    "PIE",  # flake8-pie - misc lints (no-op expressions, etc.)
+    "PT",   # flake8-pytest-style - pytest best practices
+    "Q",    # flake8-quotes - quote style consistency
+    "RUF",  # Ruff-specific rules - Ruff's own lints
+    "S",    # flake8-bandit security - security issue detection
+]
+
+# =============================================================================
+# Ignored rules
+# =============================================================================
+# Rules disabled because they conflict with our practices or are too strict
+ignore = [
+    # E731: Do not assign a lambda expression, use a def
+    # Reason: Short lambdas are fine for simple callbacks and key functions
+    # Example: sorted(items, key=lambda x: x.name) is cleaner than a def
+    "E731",
+
+    # B008: Do not perform function calls in argument defaults
+    # Reason: Common pattern with FastAPI Depends() and similar frameworks
+    # Example: def endpoint(db: Session = Depends(get_db)) is idiomatic
+    "B008",
+
+    # B904: Within an except clause, raise exceptions with raise ... from err
+    # Reason: Sometimes we intentionally want to hide the original exception
+    # from end users while still logging it internally
+    "B904",
+
+    # S101: Use of assert detected
+    # Reason: Asserts are useful for invariant checking in non-test code
+    # and essential in test code. We disable optimization (-O) in production.
+    "S101",
+
+    # S104: Possible binding to all interfaces (0.0.0.0)
+    # Reason: Intentional in containerized environments where the app
+    # must accept connections from the container network
+    "S104",
+
+    # S108: Probable insecure usage of temp file/directory
+    # Reason: /tmp usage is common in CI/CD and containerized environments
+    # where isolation is provided by the container/VM
+    "S108",
+
+    # RUF012: Mutable class attributes should be annotated with ClassVar
+    # Reason: Too noisy for dataclasses and simple class attributes
+    # where mutation is intentional or the class is used as a namespace
+    "RUF012",
+]
+
+# =============================================================================
+# Per-file rule ignores
+# =============================================================================
+# Different rules for test files where stricter rules don't apply
+[lint.per-file-ignores]
+
+# Test files (test_*.py pattern)
+"test_*.py" = [
+    "ARG",     # Unused arguments OK - fixtures may not be used directly
+    "S101",    # Assert statements are the standard way to test
+    "PLR2004", # Magic values OK - test assertions often use literals
+    "S106",    # Hardcoded passwords OK - test fixtures need fake credentials
+    "B018",    # Useless expressions OK - testing that expressions don't raise
+]
+
+# Test files (*_test.py pattern - alternative naming convention)
+"*_test.py" = [
+    "ARG",
+    "S101",
+    "PLR2004",
+    "S106",
+    "B018",
+]
+
+# conftest.py - pytest configuration and fixtures
+"conftest.py" = ["ARG"]  # Fixture arguments are passed by pytest, not called
+
+# =============================================================================
+# Import sorting (isort rules)
+# =============================================================================
+[lint.isort]
+
+# split-on-trailing-comma: If imports have trailing comma, split to multi-line
+# Enables cleaner git diffs when adding/removing imports
+split-on-trailing-comma = true
+
+# known-first-party: Packages that should be grouped as "first party"
+# These are your organization's packages, sorted after stdlib and before
+# third-party. Add your package names here.
+known-first-party = ["nos"]
+
+# =============================================================================
+# Quote style (flake8-quotes rules)
+# =============================================================================
+[lint.flake8-quotes]
+
+# docstring-quotes: Quote style for docstrings
+# Double quotes are PEP 257 standard for docstrings
+docstring-quotes = "double"
+
+# inline-quotes: Quote style for regular strings
+# Double quotes for consistency with docstrings and JSON compatibility
+inline-quotes = "double"
+
+# =============================================================================
+# Formatting configuration
+# =============================================================================
+[format]
+
+# quote-style: Quote style for the formatter (matches linter setting)
+quote-style = "double"
+
+# indent-style: Use spaces (not tabs) for indentation
+# PEP 8 recommends spaces; ensures consistent display across editors
+indent-style = "space"
+
+# skip-magic-trailing-comma: Respect trailing commas in multi-line structures
+# false = if there's a trailing comma, keep items on separate lines
+# This enables cleaner git diffs when adding items to lists/dicts
+skip-magic-trailing-comma = false
+
+# line-ending: Line ending style
+# auto = detect from file, default to LF for new files
+# Allows cross-platform development while preferring Unix line endings
+line-ending = "auto"

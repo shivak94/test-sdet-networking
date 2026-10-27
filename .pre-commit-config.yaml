@@ -1,0 +1,263 @@
+# =============================================================================
+# Python Strict pre-commit configuration
+# Comprehensive hooks for Python projects with strict quality enforcement
+# =============================================================================
+#
+# This config extends python.yaml with additional strict checks:
+# - Ruff (linting + formatting)
+# - MyPy (type checking)
+# - Bandit (security linting)
+# - Safety (dependency vulnerability scanning)
+# - Pydocstyle (docstring enforcement)
+# - Commitizen (conventional commits)
+#
+# Usage in your project's .pre-commit-config.yaml:
+#   repos:
+#     - repo: https://github.com/your-org/bldenv/gitlab-ci
+#       rev: main
+#       file: pre-commit/python-strict.yaml
+#
+# Note: This is the strictest Python configuration. For basic Python projects,
+# use python.yaml instead.
+# =============================================================================
+
+---
+# default_language_version: Sets Python version for hooks
+# python3.11 ensures consistent behaviour and access to latest features
+default_language_version:
+  python: python3.11
+
+# default_stages: Run on both pre-commit and commit message validation
+default_stages:
+  - pre-commit
+  - commit-msg
+
+# minimum_pre_commit_version: Requires 3.0.0+ for consistent default_stages
+minimum_pre_commit_version: 3.0.0
+
+# fail_fast: false = run all hooks to show all issues at once
+fail_fast: false
+
+# exclude: Patterns for directories to skip entirely
+# These are generated/cached files that shouldn't be linted
+exclude: |
+  (?x)^(
+    .*\.egg-info/.*|      # Package metadata (generated)
+    .*__pycache__/.*|     # Python bytecode cache
+    \.venv/.*|            # Virtual environments
+    \.pytest_cache/.*|    # Pytest cache
+    build/.*|             # Build output
+    dist/.*|              # Distribution packages
+    vendor/.*|            # Vendored dependencies
+    third_party/.*        # Third-party code
+  )$
+
+repos:
+  # ===========================================================================
+  # General file hygiene
+  # ===========================================================================
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      # trailing-whitespace: Remove trailing whitespace
+      # --markdown-linebreak-ext=md: Preserve markdown line breaks
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+
+      # end-of-file-fixer: Ensure newline at EOF
+      - id: end-of-file-fixer
+
+      # check-yaml: Validate YAML syntax
+      # --unsafe: Allow GitLab CI custom tags (!reference, etc.)
+      - id: check-yaml
+        args: [--unsafe]
+
+      # check-json: Validate JSON syntax
+      - id: check-json
+
+      # check-toml: Validate TOML (pyproject.toml, etc.)
+      - id: check-toml
+
+      # check-merge-conflict: Catch leftover conflict markers
+      - id: check-merge-conflict
+
+      # check-case-conflict: Detect filename case conflicts
+      - id: check-case-conflict
+
+      # check-added-large-files: Prevent large file commits
+      # --maxkb=1000: 1MB limit
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+
+      # detect-private-key: Catch private key commits
+      - id: detect-private-key
+
+      # mixed-line-ending: Normalise to Unix LF
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+      # debug-statements: Catch forgotten debugger imports
+      # Finds: import pdb, import ipdb, breakpoint(), etc.
+      - id: debug-statements
+
+      # check-ast: Validate Python syntax
+      # Catches syntax errors before commit
+      - id: check-ast
+
+      # check-builtin-literals: Enforce dict() -> {}, list() -> []
+      # Literal syntax is clearer and faster
+      - id: check-builtin-literals
+
+      # check-docstring-first: Docstring must be first statement
+      # Catches misplaced docstrings that won't be recognised
+      - id: check-docstring-first
+
+      # name-tests-test: Enforce test file naming convention
+      # --pytest-test-first: Require test_*.py (pytest default)
+      #   Alternative: *_test.py with --pytest suffix
+      - id: name-tests-test
+        args: [--pytest-test-first]
+
+  # ===========================================================================
+  # Python: Ruff (linting + formatting)
+  # ===========================================================================
+  # Ruff replaces flake8, black, isort, and pyupgrade in a single fast tool
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.10
+    hooks:
+      # ruff (linter): Static analysis for bugs, style, and best practices
+      # --fix: Automatically fix safe issues (imports, unused vars)
+      # --exit-non-zero-on-fix: Fail if fixes were applied (forces re-add)
+      #   This ensures you review auto-fixes before committing
+      - id: ruff-check
+        name: Ruff linter
+        args: [--fix, --exit-non-zero-on-fix]
+        types: [python]
+
+      # ruff-format: Code formatting (replaces Black)
+      # Enforces consistent style: quotes, line length, whitespace
+      - id: ruff-format
+        name: Ruff formatter
+        types: [python]
+
+  # ===========================================================================
+  # Python: MyPy (type checking)
+  # ===========================================================================
+  # Static type checker - catches type errors before runtime
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.19.1
+    hooks:
+      # mypy: Type checking
+      # additional_dependencies: Type stubs for common packages
+      # --ignore-missing-imports: Don't fail on untyped packages
+      - id: mypy
+        name: MyPy type checker
+        additional_dependencies:
+          - types-requests
+          - types-PyYAML
+          - types-redis
+          - types-setuptools
+          - types-toml
+        args: [--ignore-missing-imports, --no-strict-optional]
+        types: [python]
+        exclude: |
+          (?x)^(
+            tests/.*|
+            test_.*\.py$
+          )$
+
+  # ===========================================================================
+  # Python: Bandit (security linting)
+  # ===========================================================================
+  # Security-focused static analysis for Python code
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.9.2
+    hooks:
+      # bandit: Security vulnerability detection
+      # -r: Recursive scanning
+      # -x tests/: Exclude test directories (test code often has intentional
+      # "vulnerabilities")
+      # -ll: Report only medium and higher severity issues
+      - id: bandit
+        name: Bandit security linter
+        args: [-r, -x, ".venv/,tests/,third_party/,vendor/", -ll]
+        types: [python]
+        exclude: |
+          (?x)^(
+            conftest\.py$|
+            test_.*\.py$|
+            \.venv/.*|
+            tests/.*|
+            third_party/.*|
+            vendor/.*
+          )$
+
+  # ===========================================================================
+  # Python: Safety (dependency vulnerability scanning)
+  # ===========================================================================
+  # Checks installed packages for known security vulnerabilities
+  - repo: https://github.com/Lucas-C/pre-commit-hooks-safety
+    rev: v1.4.2
+    hooks:
+      # python-safety-dependencies-check: Scan requirements files for
+      # vulnerabilities
+      - id: python-safety-dependencies-check
+        name: Safety dependency check
+        files: requirements.*\.txt$
+
+  # ===========================================================================
+  # Python: Pydocstyle (docstring enforcement)
+  # ===========================================================================
+  # Enforces docstring conventions (Google style)
+  - repo: https://github.com/pycqa/pydocstyle
+    rev: 6.3.0
+    hooks:
+      # pydocstyle: Check docstring conventions
+      # --convention=google: Use Google-style docstrings
+      - id: pydocstyle
+        name: Pydocstyle docstring checker
+        args: [--convention=google]
+        types: [python]
+        exclude: |
+          (?x)^(
+            tests/.*|
+            test_.*\.py$|
+            conftest\.py$|
+            setup\.py$
+          )$
+
+  # ===========================================================================
+  # Security: Secret Detection
+  # ===========================================================================
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      # detect-secrets: Find secrets in code
+      # --baseline: Compare against audited false positives
+      - id: detect-secrets
+        args: [--baseline, .secrets.baseline]
+
+  # ===========================================================================
+  # Gitleaks: Git history secret scanning
+  # ===========================================================================
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.0
+    hooks:
+      - id: gitleaks
+        args: [--verbose]
+
+  # ===========================================================================
+  # File Permissions
+  # ===========================================================================
+  - repo: https://github.com/Lucas-C/pre-commit-hooks
+    rev: v1.5.5
+    hooks:
+      - id: forbid-crlf
+      - id: remove-crlf
+      - id: forbid-tabs
+        exclude: |
+          (?x)^(
+            Makefile.*|
+            .*\.go$|
+            .*\.tsv$
+          )$

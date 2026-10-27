@@ -1,0 +1,106 @@
+{
+  "bgp": {
+    "global": {
+      "as_number": 65001,
+      "router_id": "10.0.1.1",
+      "log_neighbor_changes": true,
+      "graceful_restart": {
+        "enabled": true,
+        "restart_time": 120,
+        "stalepath_time": 360
+      }
+    },
+    "neighbors": [
+      {
+        "neighbor_address": "10.1.1.0",
+        "remote_as": 65100,
+        "description": "spine1",
+        "update_source": "Ethernet1",
+        "timers": {
+          "hold_time": 180,
+          "keepalive": 60
+        },
+        "address_family": {
+          "ipv4_unicast": {
+            "enabled": true,
+            "send_community": "both",
+            "soft_reconfiguration_inbound": true
+          }
+        }
+      },
+      {
+        "neighbor_address": "10.1.2.0",
+        "remote_as": 65100,
+        "description": "spine2",
+        "update_source": "Ethernet2",
+        "timers": {
+          "hold_time": 180,
+          "keepalive": 60
+        },
+        "address_family": {
+          "ipv4_unicast": {
+            "enabled": true,
+            "send_community": "both",
+            "soft_reconfiguration_inbound": true
+          }
+        }
+      }
+    ],
+    "networks": [
+      {
+        "prefix": "10.0.1.1/32",
+        "route_map": "LOOPBACK"
+      },
+      {
+        "prefix": "192.168.1.0/24",
+        "route_map": "CONNECTED"
+      }
+    ],
+    "redistribute": [
+      {
+        "protocol": "connected",
+        "route_map": "CONNECTED_TO_BGP"
+      }
+    ]
+  },
+  "route_maps": {
+    "LOOPBACK": {
+      "statements": [
+        {
+          "sequence": 10,
+          "action": "permit",
+          "match": {
+            "interface": "Loopback0"
+          },
+          "set": {
+            "community": "65001:100"
+          }
+        }
+      ]
+    },
+    "CONNECTED_TO_BGP": {
+      "statements": [
+        {
+          "sequence": 10,
+          "action": "permit",
+          "match": {
+            "prefix_list": "CONNECTED_PREFIXES"
+          }
+        }
+      ]
+    }
+  },
+  "prefix_lists": {
+    "CONNECTED_PREFIXES": {
+      "entries": [
+        {
+          "sequence": 10,
+          "action": "permit",
+          "prefix": "192.168.0.0/16",
+          "ge": 24,
+          "le": 24
+        }
+      ]
+    }
+  }
+}
